@@ -1,6 +1,6 @@
 import { randomInteger } from "./utilities";
 
-const maxFPS = 10;
+const maxFPS = 60;
 
 export class Cube {
     //ThreeJS variables
@@ -19,10 +19,6 @@ export class Cube {
     uniforms = null;
 
     //animations variables
-
-    lastTimestamp = 0;
-
-    timestep = 1000 / maxFPS;
 
     animationComplete = true;
 
@@ -54,10 +50,7 @@ export class Cube {
         this.scene.background = new THREE.Color( 'lightblue' );
 
         this.uniforms = {
-            colorA:      {type: 'vec3', value: new THREE.Color(0x2138FF)},
-            colorB:      {type: 'vec3', value: new THREE.Color(0xFFCB0E)},
             u_time:      {type: 'float', value: Date.now()},
-            positionZ:   {type: 'float', value: positionZ},
             fogColor:    { type: "vec3", value: this.scene.fog.color },
             fogNear:     { type: "float", value: this.scene.fog.near },
             fogFar:      { type: "float", value: this.scene.fog.far }
@@ -75,8 +68,13 @@ export class Cube {
         let cube = new THREE.Mesh(geometry, material)
         //cube.position.x = 200;
         cube.position.z = positionZ;
-        cube.rotation.y = 5;
-        cube.rotation.x = 5;
+        
+
+        cube.position.y = 0;
+        cube.position.x = 0;
+
+        cube.rotation.y = 1.6 * Math.PI;
+        cube.rotation.x = 1.6 * Math.PI;
 
         cube.cursor = 'pointer';
         
@@ -85,9 +83,6 @@ export class Cube {
 
         this.scene.add(cube);
         this.animationLoop();
-
-
-        console.log(this.scene.fog)
     }
 
     #vertexShader() {
@@ -95,9 +90,11 @@ export class Cube {
           varying vec3 vUv; 
           varying vec4 modelViewPosition; 
           varying vec3 vecNormal;
+          varying vec3 mv;
       
           void main() {
-            vUv = position; 
+            vUv = position;
+            mv = (modelMatrix * vec4(position, 1.0)).xyz;
             vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
             gl_Position = projectionMatrix * modelViewPosition; 
           }
@@ -110,18 +107,27 @@ export class Cube {
             precision mediump float;
             #endif
 
-            uniform vec3 colorA; 
-            uniform vec3 colorB; 
             uniform float u_time;
-            uniform float positionZ;
             varying vec3 vUv;
+            varying vec3 mv;
 
             uniform vec3 fogColor;
             uniform float fogNear;
             uniform float fogFar;
+
+
       
             void main() {
-              gl_FragColor = vec4(mix(colorA, colorB, abs((positionZ + 0.5) * sin(u_time))), 1.0);
+              vec3 colorA = vec3(1.0, 0.0 , 0.0);
+              vec3 colorB = vec3(0.0, 1.0, 0.0);
+
+              vec3 color = vec3(0.0);
+              color.x += abs(sin(mv.x * 0.01 * 0.5 * cos(u_time * 1.0 * 3.14159))); 
+              color.y += abs(sin(mv.y * 0.01 * 0.5 * cos(u_time * 2.0 * 3.14159))); 
+              color.z += abs(sin(mv.z * 0.01 * 0.75 * cos(u_time * 3.0 * 3.14159)));
+              
+              gl_FragColor = vec4(color, 1.0);
+              
               #ifdef USE_FOG
                   #ifdef USE_LOGDEPTHBUF_EXT
                       float depth = gl_FragDepthEXT / gl_FragCoord.w;
@@ -155,7 +161,13 @@ export class Cube {
 
         const axis = ['x', 'y'];
         const randIndexAxis = randomInteger(0, 2);
-        const value = randomInteger(2, 10)
+
+        const currentValueForAxis = this.cube.rotation[axis[randIndexAxis]];
+        let value = currentValueForAxis;
+        while(value <= currentValueForAxis + 1 && value >= currentValueForAxis - 1){
+            value = randomInteger(2, 10);
+        }
+
         gsap.to(this.cube.rotation, {duration: 2, [axis[randIndexAxis]]: value, 
             onComplete: () => this.animationComplete = true,
             onUpdate: () => this.renderer.render(this.scene, this.camera),
@@ -167,20 +179,16 @@ export class Cube {
             return;
         
         requestAnimationFrame(this.animationLoop);
-
-        if (time - this.lastTimestamp < this.timestep) return;
-
-        this.lastTimestamp = time;
     
         this.renderer.render(this.scene, this.camera)
         
         //Блок с изменением цвета
-        this.uniforms.u_time = {type: 'float', value: time % 100};
+        this.uniforms.u_time = {type: 'float', value: (time * 0.001).toFixed(2)};
         this.cube.material = new THREE.ShaderMaterial({
             uniforms: this.uniforms,
             fragmentShader: this.#fragmentShader(),
             vertexShader: this.#vertexShader(),
-            fog: true,
+            fog: false,
         });
     }
 
